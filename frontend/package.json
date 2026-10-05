@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "check:dating": "node -e \"const fs=require('fs');let s=fs.readFileSync('scripts/dating-check.cjs','utf8');s=s.replace(\\\"require('./src/data/dating/state-machine.ts')\\\",\\\"require('../src/data/dating/state-machine.ts')\\\").replace(\\\"require('./src/api/dating-service.ts')\\\",\\\"require('../src/api/dating-service.ts')\\\").replace(\\\"require('./src/api/local-service.ts')\\\",\\\"require('../src/api/local-service.ts')\\\");fs.writeFileSync('scripts/.dating-check.run.cjs',\\\"require('./ts-register.cjs');\\\\n\\\"+s)\" && node scripts/.dating-check.run.cjs"
   },
   "dependencies": {
     "pinia": "^2.1.7",

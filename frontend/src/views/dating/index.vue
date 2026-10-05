@@ -3,16 +3,17 @@
     <header class="page-head">
       <div>
         <h2>测年送检管理</h2>
-        <p class="page-desc">维护测年送检单，围绕送检编号、样品类型、采样单位、采样层位做登记、筛选与状态流转。</p>
+        <p class="page-desc">维护测年送检单，围绕送检编号、样品类型、采样单位、采样层位做登记、筛选与状态流转。状态结论统一由送检状态机给出：人工归档结论优先于日期自动推断。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记测年送检单</button>
+        <RouterLink class="btn" type="button" to="/dating/archive">归档工作台</RouterLink>
         <button class="btn" type="button" @click="exportRows">导出测年送检清单</button>
       </div>
     </header>
 
     <div class="stat-row">
-      <article v-for="item in stats" :key="item.label" class="stat-card">
+      <article v-for="item in statCards" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>
         <strong class="stat-value">{{ item.value }}</strong>
       </article>
@@ -38,16 +39,22 @@
         <tr>
           <th v-for="column in columns" :key="column">{{ column }}</th>
           <th>当前状态</th>
+          <th>结论来源</th>
           <th>可执行动作</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
           <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
-          <td>{{ row.status }}</td>
+          <td>
+            {{ resolve(row).state }}
+            <span v-if="resolve(row).overdue" class="overdue-tag">逾期未返回</span>
+          </td>
+          <td>{{ SOURCE_LABELS[resolve(row).source] }}</td>
           <td class="row-actions">
+            <RouterLink class="link" :to="`/dating/${row.id}`">查看详情</RouterLink>
             <button
-              v-for="action in actions"
+              v-for="action in allowedActions(resolve(row).state)"
               :key="action"
               class="link"
               type="button"
@@ -55,10 +62,11 @@
             >
               {{ action }}
             </button>
+            <span v-if="!allowedActions(resolve(row).state).length" class="muted-text">终态，无动作</span>
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无测年送检数据，可先登记测年送检单</td>
+          <td :colspan="columns.length + 3" class="empty-state">暂无测年送检数据，可先登记测年送检单</td>
         </tr>
       </tbody>
     </table>
@@ -73,29 +81,42 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import { downloadEntries } from '@/api/local-service'
+import { datingStats, listDatingEntries, runDatingAction } from '@/api/dating-service'
 import {
-  downloadEntries,
-  listEntries,
-  moduleMeta,
-  runAction as applyAction,
-} from '@/api/local-service'
+  allowedActions,
+  type DatingAction,
+  DATING_STATES,
+  resolveDatingState,
+  SOURCE_LABELS,
+} from '@/data/dating/state-machine'
 import type { EntryRow } from '@/data/types'
 
-const meta = moduleMeta('dating')
 const columns = ["送检编号", "样品类型", "采样单位", "采样层位", "送检方法", "送检日期", "预计返回", "送检状态"]
-const actions = ["送出检测", "登记结果", "归档报告"]
-const statuses = ["待送检", "已送检", "检测中", "已出结果", "已归档"]
-const stats = [{"label": "送检总数", "value": 0}, {"label": "检测中数", "value": 0}, {"label": "已出结果数", "value": 0}]
+const filterFields = columns.slice(0, 3)
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
-const filterFields = columns.slice(0, 3)
+
+function resolve(row: EntryRow) {
+  return resolveDatingState(row)
+}
+
+const stats = ref(datingStats())
+const statCards = computed(() => [
+  { label: '送检总数', value: stats.value.total },
+  { label: '检测中数', value: stats.value.inLab },
+  { label: '已出结果数', value: stats.value.resultReady },
+  { label: '已归档数', value: stats.value.archived },
+  { label: '逾期未返回', value: stats.value.overdue },
+])
+
 const statusSummary = computed(() =>
-  statuses.map((status: string) => ({
+  DATING_STATES.map((status) => ({
     status,
-    count: rows.value.filter((row) => String(row.status) === status).length,
+    count: rows.value.filter((row) => resolveDatingState(row).state === status).length,
   })),
 )
 
@@ -105,16 +126,16 @@ function resetFilters() {
 }
 
 function exportRows() {
-  downloadEntries(meta.key)
+  downloadEntries('dating')
 }
 
 function openCreate() {
   errorMessage.value = '测年送检单登记入口尚未接入审批流'
 }
 
-function runAction(action: string, row: EntryRow) {
+function runAction(action: DatingAction, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  const result = runDatingAction(Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
     return
@@ -125,9 +146,10 @@ function runAction(action: string, row: EntryRow) {
 function reload() {
   errorMessage.value = ''
   try {
-    const payload = listEntries(meta.key, filters.value)
+    const payload = listDatingEntries(filters.value)
     rows.value = payload.items
     total.value = payload.total
+    stats.value = datingStats()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '测年送检列表读取失败'
   }
