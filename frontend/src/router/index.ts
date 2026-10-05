@@ -7,6 +7,8 @@ const Feature = () => import('@/views/feature/index.vue')
 const Artifact = () => import('@/views/artifact/index.vue')
 const Flotation = () => import('@/views/flotation/index.vue')
 const Dating = () => import('@/views/dating/index.vue')
+const DatingArchive = () => import('@/views/dating/archive.vue')
+const DatingDetail = () => import('@/views/dating/detail.vue')
 const Photography = () => import('@/views/photography/index.vue')
 const Drawing = () => import('@/views/drawing/index.vue')
 const Diary = () => import('@/views/diary/index.vue')
@@ -30,6 +32,8 @@ const router = createRouter({
     { path: '/artifact', name: 'artifact', component: Artifact },
     { path: '/flotation', name: 'flotation', component: Flotation },
     { path: '/dating', name: 'dating', component: Dating },
+    { path: '/dating/archive', name: 'dating-archive', component: DatingArchive },
+    { path: '/dating/:id', name: 'dating-detail', component: DatingDetail },
     { path: '/photography', name: 'photography', component: Photography },
     { path: '/drawing', name: 'drawing', component: Drawing },
     { path: '/diary', name: 'diary', component: Diary },

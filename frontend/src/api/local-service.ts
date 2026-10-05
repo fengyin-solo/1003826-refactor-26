@@ -1,3 +1,4 @@
+import { runDatingAction } from '@/api/dating-service'
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
@@ -29,6 +30,11 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {
+  if (key === 'dating') {
+    // 测年送检的状态流转统一走状态机，通用动作通道不再自行解释，
+    // 归档等动作从哪个入口进来都遵守同一份判断。
+    return runDatingAction(id, action)
+  }
   const meta = moduleMeta(key)
   const target = meta.actionTargets[action]
   if (!target) {

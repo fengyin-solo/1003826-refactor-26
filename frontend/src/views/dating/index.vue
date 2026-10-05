@@ -8,6 +8,7 @@
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记测年送检单</button>
         <button class="btn" type="button" @click="exportRows">导出测年送检清单</button>
+        <RouterLink class="btn" to="/dating/archive">归档入口</RouterLink>
       </div>
     </header>
 
@@ -44,10 +45,10 @@
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
           <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
-          <td>{{ row.status }}</td>
+          <td>{{ statusOf(row) }}</td>
           <td class="row-actions">
             <button
-              v-for="action in actions"
+              v-for="action in actionsOf(row)"
               :key="action"
               class="link"
               type="button"
@@ -55,6 +56,7 @@
             >
               {{ action }}
             </button>
+            <RouterLink class="link" :to="`/dating/${row.id}`">详情</RouterLink>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -73,18 +75,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import {
-  downloadEntries,
-  listEntries,
-  moduleMeta,
-  runAction as applyAction,
-} from '@/api/local-service'
+import { listDatingEntries, runDatingAction } from '@/api/dating-service'
+import { downloadEntries, moduleMeta } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
+import { DATING_STATUSES, availableDatingActions, resolveDatingStatus } from '@/domain/dating-machine'
 
 const meta = moduleMeta('dating')
 const columns = ["送检编号", "样品类型", "采样单位", "采样层位", "送检方法", "送检日期", "预计返回", "送检状态"]
-const actions = ["送出检测", "登记结果", "归档报告"]
-const statuses = ["待送检", "已送检", "检测中", "已出结果", "已归档"]
 const stats = [{"label": "送检总数", "value": 0}, {"label": "检测中数", "value": 0}, {"label": "已出结果数", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
@@ -92,12 +89,21 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+// 状态图例与每行状态、可执行动作都来自同一台状态机，列表不再自己解释状态
 const statusSummary = computed(() =>
-  statuses.map((status: string) => ({
+  DATING_STATUSES.map((status) => ({
     status,
-    count: rows.value.filter((row) => String(row.status) === status).length,
+    count: rows.value.filter((row) => resolveDatingStatus(row) === status).length,
   })),
 )
+
+function statusOf(row: EntryRow) {
+  return resolveDatingStatus(row)
+}
+
+function actionsOf(row: EntryRow) {
+  return availableDatingActions(row)
+}
 
 function resetFilters() {
   filters.value = {}
@@ -114,7 +120,7 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  const result = runDatingAction(Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
     return
@@ -125,7 +131,7 @@ function runAction(action: string, row: EntryRow) {
 function reload() {
   errorMessage.value = ''
   try {
-    const payload = listEntries(meta.key, filters.value)
+    const payload = listDatingEntries(filters.value)
     rows.value = payload.items
     total.value = payload.total
   } catch (error) {
